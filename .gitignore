@@ -1,0 +1,9 @@
+.env
+*.db
+venv/
+__pycache__/
+*.pyc
+.vscode/
+.idea/
+prisma/migrations/
+session_monitor.session

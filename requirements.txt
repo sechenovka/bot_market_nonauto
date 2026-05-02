@@ -1,0 +1,7 @@
+aiogram>=3.0
+prisma-client-py
+openai
+aiohttp
+python-dotenv
+pydantic
+telethon
