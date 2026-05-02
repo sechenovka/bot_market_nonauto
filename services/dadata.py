@@ -17,7 +17,7 @@ async def search_organizations(query: str, count: int = 5) -> list[dict]:
             result = []
             for s in suggestions:
                 party = s["data"]
-                if party.get("type") != "INDIVIDUAL":  # только ИП
+                if party.get("type") != "INDIVIDUAL":
                     continue
                 inn = party.get("inn")
                 name = party.get("value") or party.get("name", {}).get("short_with_opf")

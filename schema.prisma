@@ -18,8 +18,9 @@ model Business {
   routineProblems String?
   contacts        String?
   source          String?
-  isDevelopedTech Boolean  @default(false)
   sourceUrl       String?
+  isDevelopedTech Boolean  @default(false)
+  isPosted        Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

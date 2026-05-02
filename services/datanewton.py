@@ -1,52 +1,40 @@
 import aiohttp
 from config import DATANEWTON_API_KEY
 
-DATANEWTON_BASE = "https://api.datanewton.ru/v1"
-HEADERS = {
-    "Authorization": f"Bearer {DATANEWTON_API_KEY}",
-    "Content-Type": "application/json"
-}
+DATANEWTON_URL = "https://api.datanewton.ru/v1/search/company"  # уточни URL в документации
 
 async def search_companies(query: str, count: int = 5) -> list[dict]:
-    endpoint = f"{DATANEWTON_BASE}/search"
-    params = {
-        "q": query,
-        "per_page": count,
-        "type": "company"
-    }
+    headers = {"Authorization": f"Bearer {DATANEWTON_API_KEY}"}
+    params = {"q": query, "limit": count}
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(endpoint, params=params, headers=HEADERS) as resp:
+            async with session.get(DATANEWTON_URL, headers=headers, params=params) as resp:
                 if resp.status != 200:
-                    print(f"DataNewton error: {resp.status}")
                     return []
                 data = await resp.json()
                 items = data.get("items", [])
-                results = []
+                result = []
                 for item in items:
-                    name = item.get("name", {}).get("short_with_opf") or item.get("name", {}).get("full")
                     inn = item.get("inn")
-                    ogrn = item.get("ogrn")
-                    address = item.get("address", {}).get("value") if item.get("address") else None
-                    okved = item.get("okved", {}).get("name") if item.get("okved") else None
-                    phones = item.get("phones", [])
-                    emails = item.get("emails", [])
-                    contacts = {
-                        "phone": phones[0] if phones else None,
-                        "email": emails[0] if emails else None,
-                        "site": item.get("site") or None
-                    }
-                    results.append({
+                    name = item.get("name") or item.get("short_name")
+                    if not name:
+                        continue
+                    phones = [p.get("value") for p in item.get("phones", [])]
+                    emails = [e.get("value") for e in item.get("emails", [])]
+                    result.append({
                         "name": name,
                         "inn": inn,
-                        "ogrn": ogrn,
-                        "type": "ИП" if item.get("type") == "individual" else "ООО",
+                        "type": None,
                         "registration": "registered",
-                        "description": okved or "",
-                        "contacts": contacts,
+                        "description": item.get("okved") or "",
+                        "contacts": {
+                            "phone": phones[0] if phones else None,
+                            "email": emails[0] if emails else None,
+                            "site": item.get("site") or None
+                        },
                         "source": "datanewton"
                     })
-                return results
+                return result
         except Exception as e:
-            print(f"DataNewton exception: {e}")
+            print(f"DataNewton error: {e}")
             return []

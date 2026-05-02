@@ -1,57 +1,60 @@
 import aiohttp
+import re
 from services.deepseek import analyze_raw_text
+from config import YANDEX_FOLDER_ID, YANDEX_API_KEY
 
-AVITO_URL = "https://www.avito.ru/web/1/main/items"
+YANDEX_SEARCH_URL = "https://yandex.ru/search/xml"
 
-async def fetch_avito_with_reviews(query: str, location_id: int = 637640, limit: int = 5) -> list[dict]:
+async def search_avito_via_yandex(query: str, limit: int = 5) -> list[dict]:
     params = {
-        'query': query,
-        'locationId': location_id,
-        'limit': limit,
-        'sort': 'date'
+        'folderid': YANDEX_FOLDER_ID,
+        'apikey': YANDEX_API_KEY,
+        'query': f'site:avito.ru {query}',
+        'lr': '213',
+        'l10n': 'ru',
+        'sortby': 'rlv',
+        'filter': 'moderate',
+        'maxpassages': '0',
+        'groupby': 'attr=d.mode=flat.groups-on-page=5.docs-in-group=1',
+        'page': '0',
     }
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-    }
+    headers = {'User-Agent': 'Mozilla/5.0'}
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(AVITO_URL, params=params, headers=headers) as resp:
+            async with session.get(YANDEX_SEARCH_URL, params=params, headers=headers) as resp:
                 if resp.status != 200:
                     return []
-                data = await resp.json()
+                data = await resp.text()
+                urls = re.findall(r'<url>(https://www\.avito\.ru[^<]+)</url>', data)
+                titles = re.findall(r'<title>(.*?)</title>', data)
                 items = []
-                for item in data.get('items', []):
-                    reviews = item.get('seller', {}).get('reviewsCount', 0)
-                    if reviews > 0:
-                        items.append({
-                            'id': item['id'],
-                            'title': item.get('title'),
-                            'url': f"https://www.avito.ru{item.get('urlPath', '')}",
-                            'reviews': reviews
-                        })
+                for i in range(min(len(urls), len(titles), limit)):
+                    items.append({
+                        'id': str(hash(urls[i])),
+                        'title': titles[i],
+                        'url': urls[i],
+                        'reviews': 0
+                    })
                 return items
         except Exception as e:
-            print(f"Avito error: {e}")
+            print(f"Яндекс.Поиск ошибка: {e}")
             return []
 
 async def process_avito_items(query: str, channel_id: int, bot) -> None:
-    listings = await fetch_avito_with_reviews(query)
+    listings = await search_avito_via_yandex(query)
     for item in listings:
-        analysis = await analyze_raw_text(f"Продаю: {item['title']}. Много отзывов.")
+        analysis = await analyze_raw_text(f"Продаю: {item['title']}.")
         if analysis.get('type') and analysis['type'] != 'none':
             probs = '\n'.join(f'• {p}' for p in analysis.get('problems', []))
             text = (
                 f"🛍 <b>Avito: {item['title']}</b>\n"
-                f"🔗 <a href='{item['url']}'>Смотреть товар</a>\n"
-                f"⭐ Отзывов: {item['reviews']}\n\n"
+                f"🔗 <a href='{item['url']}'>Смотреть объявление</a>\n\n"
                 f"<b>Возможные проблемы:</b>\n{probs}\n"
-                f"<i>Источник: Avito (незарегистрированный продавец)</i>"
+                f"<i>Источник: Avito (легальный поиск)</i>"
             )
-            try:
-                await bot.send_message(channel_id, text, parse_mode="HTML")
-            except Exception as e:
-                print(f"Ошибка отправки Avito-сообщения: {e}")
         else:
-            await bot.send_message(channel_id,
-                f"🔍 Найден популярный товар на Avito:\n<a href='{item['url']}'>{item['title']}</a> (отзывов: {item['reviews']})",
-                parse_mode="HTML")
+            text = f"🔍 Найден популярный товар на Avito:\n<a href='{item['url']}'>{item['title']}</a>"
+        try:
+            await bot.send_message(channel_id, text, parse_mode="HTML")
+        except Exception as e:
+            print(f"Ошибка отправки Avito-сообщения: {e}")

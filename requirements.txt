@@ -4,4 +4,3 @@ openai
 aiohttp
 python-dotenv
 pydantic
-telethon

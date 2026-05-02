@@ -5,7 +5,6 @@ from database import prisma
 from services.dadata import search_organizations
 from services.datanewton import search_companies
 from services.deepseek import analyze_business, analyze_raw_text, is_it_or_tech_company
-from services.telegram_monitor import fetch_channel_messages
 from services.marketplace import process_avito_items
 from config import CHANNEL_ID
 
@@ -54,12 +53,11 @@ class SearchController:
                         continue
                     await self._process_official_business(biz)
 
-                # --- 3. Avito ---
+                # --- 3. Avito (через Яндекс) ---
                 avito_queries = ["айфон", "мебель ручной работы", "вязаные вещи"]
                 for q in avito_queries:
                     await process_avito_items(q, CHANNEL_ID, self.bot)
 
-                # Пауза 15–30 минут
                 await asyncio.sleep(random.randint(900, 1800))
 
             except asyncio.CancelledError:
@@ -69,12 +67,10 @@ class SearchController:
                 await asyncio.sleep(60)
 
     async def _process_official_business(self, biz: dict):
-        # Фильтр IT и технологически развитых
         if await is_it_or_tech_company(biz["name"], biz.get("description", "")):
             return
 
         analysis = await analyze_business(biz["name"], biz.get("description", ""), "")
-        # Дополнительно проверяем тип на случай ошибки
         if analysis.get("type") and "IT" in analysis["type"].upper():
             return
 
