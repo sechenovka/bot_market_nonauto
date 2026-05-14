@@ -129,6 +129,12 @@ class SearchController:
                 contact_str = "\n".join(parts) or "Нет"
             else:
                 contact_str = f"🔗 {source_url}" if source_url else "Нет"
+            try:
+                await self.bot.send_message(CHANNEL_ID, text, parse_mode="HTML")
+            except Exception as e:
+                print(f"Ошибка отправки в канал: {e}")
+                import traceback
+                traceback.print_exc()
         except:
             problems_str = problems
             contact_str = "Нет"

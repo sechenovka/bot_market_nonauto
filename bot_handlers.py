@@ -29,3 +29,14 @@ async def stop_search_cmd(message: types.Message):
         await message.answer("⏹ Поиск остановлен.")
     else:
         await message.answer("Поиск не активен.")
+
+@dp.message(Command("test_post"))
+async def test_post(message: types.Message):
+    try:
+        await bot.send_message(CHANNEL_ID, "🧪 Тестовое сообщение от бота")
+        await message.answer("✅ Сообщение в канал отправлено успешно!")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка отправки: {e}")
+        # Выведем полный трейсбек в консоль
+        import traceback
+        traceback.print_exc()
