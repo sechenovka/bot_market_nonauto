@@ -12,8 +12,6 @@ async def search_organizations(query: str, count: int = 5) -> list[dict]:
     async with get_session() as session:
         async with session.post(DADATA_URL, json=payload, headers=headers) as resp:
             print(f"[Dadata] Статус ответа: {resp.status}")
-            text = await resp.text()
-            print(f"[Dadata] Первые 400 символов ответа: {text[:400]}")
             if resp.status != 200:
                 return []
             try:
