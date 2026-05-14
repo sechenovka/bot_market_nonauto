@@ -2,16 +2,12 @@ import sqlite3
 import asyncio
 from config import DATABASE_URL
 
-DB_PATH = DATABASE_URL.replace("file:", "")  # убираем префикс file:
-
-# Глобальное синхронное соединение (будем использовать через asyncio.to_thread)
-conn: sqlite3.Connection = None
+DB_PATH = DATABASE_URL.replace("file:", "")
 
 def _init_db_sync():
-    """Синхронная инициализация БД (вызывается в отдельном потоке)."""
-    global conn
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
+    c = conn.cursor()
+    c.execute("""
         CREATE TABLE IF NOT EXISTS business (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -29,33 +25,29 @@ def _init_db_sync():
             updatedAt TEXT DEFAULT (datetime('now'))
         )
     """)
-    conn.execute("""
+    c.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_name_type ON business(name, type)
     """)
     conn.commit()
+    conn.close()
 
 async def init_db():
-    """Асинхронная инициализация БД при запуске."""
     await asyncio.to_thread(_init_db_sync)
 
-async def close_db():
-    """Закрытие соединения (опционально)."""
-    global conn
-    if conn:
-        await asyncio.to_thread(conn.close)
-
-async def execute_db(sql: str, params: tuple = ()) -> sqlite3.Cursor:
-    """Выполняет SQL-запрос в отдельном потоке и возвращает курсор."""
+async def execute_db(sql: str, params: tuple = ()):
     def _execute():
-        return conn.execute(sql, params)
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.execute(sql, params)
+        conn.commit()
+        conn.close()
+        return cursor
     return await asyncio.to_thread(_execute)
 
 async def fetch_one(sql: str, params: tuple = ()):
-    """Получает одну строку из БД."""
-    cursor = await execute_db(sql, params)
-    row = cursor.fetchone()
-    return row
-
-async def commit_db():
-    """Коммит изменений."""
-    await asyncio.to_thread(conn.commit)
+    def _fetch():
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(sql, params).fetchone()
+        conn.close()
+        return row
+    return await asyncio.to_thread(_fetch)

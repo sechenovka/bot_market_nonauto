@@ -1,14 +1,14 @@
 import asyncio
-from bot_handlers import dp, bot
-from database import init_db, close_db
+import bot_handlers
+import database
 
 async def main():
-    await init_db()
+    await database.init_db()
     print("База данных готова")
     try:
-        await dp.start_polling(bot)
+        await bot_handlers.dp.start_polling(bot_handlers.bot)
     finally:
-        await close_db()
+        await database.close_db()
 
 if __name__ == "__main__":
     asyncio.run(main())
