@@ -1,21 +1,18 @@
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.filters import Command
-from aiohttp_socks import ProxyConnector
 from config import BOT_TOKEN, CHANNEL_ID, PROXY_URL
 from searcher import SearchController
 
 search_ctrl = SearchController()
+dp = Dispatcher()
 
 # Создаём сессию с прокси, если он задан
 if PROXY_URL:
-    connector = ProxyConnector.from_url(PROXY_URL)
-    session = AiohttpSession(connector=connector)
+    session = AiohttpSession(proxy=PROXY_URL)
     bot = Bot(token=BOT_TOKEN, session=session)
 else:
     bot = Bot(token=BOT_TOKEN)
-
-dp = Dispatcher()
 
 @dp.message(Command("start_search"))
 async def start_search_cmd(message: types.Message):
