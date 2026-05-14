@@ -1,7 +1,9 @@
 import asyncio
 import random
 import json
-from database import prisma
+import uuid
+from datetime import datetime
+from database import fetch_one, execute_db, commit_db
 from services.dadata import search_organizations
 from services.datanewton import search_companies
 from services.deepseek import analyze_business, analyze_raw_text, is_it_or_tech_company
@@ -38,22 +40,22 @@ class SearchController:
             try:
                 keyword = random.choice(KEYWORDS)
 
-                # --- 1. Dadata ---
+                # 1. Dadata
                 orgs_dadata = await search_organizations(keyword, count=3)
                 for biz in orgs_dadata:
                     await self._process_official_business(biz)
 
-                # --- 2. DataNewton ---
+                # 2. DataNewton
                 orgs_newton = await search_companies(keyword, count=3)
                 for biz in orgs_newton:
                     if not biz["inn"]:
                         continue
-                    existing = await prisma.business.find_first(where={"inn": biz["inn"]})
-                    if existing:
+                    row = await fetch_one("SELECT id FROM business WHERE inn = ?", (biz["inn"],))
+                    if row:
                         continue
                     await self._process_official_business(biz)
 
-                # --- 3. Avito (через Яндекс) ---
+                # 3. Avito
                 avito_queries = ["айфон", "мебель ручной работы", "вязаные вещи"]
                 for q in avito_queries:
                     await process_avito_items(q, CHANNEL_ID, self.bot)
@@ -74,29 +76,51 @@ class SearchController:
         if analysis.get("type") and "IT" in analysis["type"].upper():
             return
 
-        record = await prisma.business.create(
-            data={
-                "name": biz["name"],
-                "inn": biz.get("inn"),
-                "type": analysis.get("type"),
-                "registration": "registered",
-                "description": biz.get("description"),
-                "routineProblems": json.dumps(analysis.get("problems", [])),
-                "contacts": json.dumps(biz.get("contacts", {})),
-                "source": biz.get("source"),
-                "isDevelopedTech": False,
-            }
-        )
+        biz_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat()
+
+        await execute_db("""
+            INSERT OR IGNORE INTO business (id, name, inn, type, registration, description, routineProblems, contacts, source, sourceUrl, isDevelopedTech, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            biz_id,
+            biz["name"],
+            biz.get("inn"),
+            analysis.get("type"),
+            "registered",
+            biz.get("description"),
+            json.dumps(analysis.get("problems", [])),
+            json.dumps(biz.get("contacts", {})),
+            biz.get("source"),
+            None,
+            0,
+            now,
+            now
+        ))
+        await commit_db()
+
+        record = {
+            "id": biz_id,
+            "name": biz["name"],
+            "inn": biz.get("inn"),
+            "type": analysis.get("type"),
+            "registration": "registered",
+            "description": biz.get("description"),
+            "routineProblems": json.dumps(analysis.get("problems", [])),
+            "contacts": json.dumps(biz.get("contacts", {})),
+            "source": biz.get("source"),
+            "sourceUrl": None
+        }
         await self._post_to_channel(record)
 
     async def _post_to_channel(self, record):
-        problems = record.routineProblems or "[]"
-        contacts = record.contacts or "{}"
-        source_url = record.sourceUrl
+        problems = record.get("routineProblems", "[]")
+        contacts = record.get("contacts", "{}")
+        source_url = record.get("sourceUrl")
         try:
             prob_list = json.loads(problems)
             problems_str = "\n".join(f"• {p}" for p in prob_list) if prob_list else "Неизвестны"
-            if record.source in ("dadata", "datanewton"):
+            if record["source"] in ("dadata", "datanewton"):
                 cont_dict = json.loads(contacts)
                 parts = []
                 if cont_dict.get("phone"): parts.append(f"📞 {cont_dict['phone']}")
@@ -110,13 +134,13 @@ class SearchController:
             contact_str = "Нет"
 
         text = (
-            f"🆕 <b>{record.name}</b>\n"
-            f"ИНН: {record.inn or '—'}\n"
-            f"Тип: {record.type or 'не определён'}\n\n"
-            f"<b>Описание:</b> {record.description or 'нет'}\n\n"
+            f"🆕 <b>{record['name']}</b>\n"
+            f"ИНН: {record.get('inn') or '—'}\n"
+            f"Тип: {record.get('type') or 'не определён'}\n\n"
+            f"<b>Описание:</b> {record.get('description') or 'нет'}\n\n"
             f"<b>Рутинные проблемы:</b>\n{problems_str}\n\n"
             f"<b>Контакты:</b>\n{contact_str}\n"
-            f"<i>ID: {record.id}</i>"
+            f"<i>ID: {record['id']}</i>"
         )
         try:
             await self.bot.send_message(CHANNEL_ID, text, parse_mode="HTML")

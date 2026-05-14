@@ -12,3 +12,4 @@ CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL", "file:./market.db")
+PROXY_URL = os.getenv("PROXY_URL", None)  # socks5://user:pass@host:port или http://...
